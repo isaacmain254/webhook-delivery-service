@@ -1,5 +1,47 @@
- const config = {
-    databaseUrl: process.env.DATABASE_URL
+import 'dotenv/config'
+import { z } from 'zod'
+
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().int().positive().default(5000),
+  DATABASE_URL: z
+    .url()
+    .refine(
+      (value) => value.startsWith('postgres://') || value.startsWith('postgresql://'),
+      'must be a PostgreSQL connection URL',
+    ),
+  REDIS_URL: z
+    .url()
+    .refine(
+      (value) => value.startsWith('redis://') || value.startsWith('rediss://'),
+      'must be a Redis connection URL',
+    )
+    .default('redis://localhost:6379'),
+  API_KEY_HASH_SECRET: z.string().min(32),
+  MAX_DELIVERY_ATTEMPTS: z.coerce.number().int().positive().default(5),
+  INITIAL_RETRY_DELAY_MS: z.coerce.number().int().positive().default(1000),
+  MAX_RETRY_DELAY_MS: z.coerce.number().int().positive().default(3_600_000),
+  DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  LEASE_DURATION_MS: z.coerce.number().int().positive().default(120_000),
+  REQUIRE_HTTPS_DESTINATIONS: z.stringbool().default(true),
+})
+
+export type AppConfig = z.infer<typeof EnvSchema>
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const result = EnvSchema.safeParse(env)
+
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'environment'}: ${issue.message}`)
+      .join('; ')
+    throw new Error(`Invalid environment configuration: ${details}`)
+  }
+
+  return result.data
 }
+
+const config = loadConfig()
 
 export default config

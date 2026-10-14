@@ -1,15 +1,14 @@
 import express from 'express';
-import 'dotenv/config'
 import endpointRoutes from './routes.js'
+import config from './config.js'
 
 
 const app = express();
-const port = process.env.PORT || 5000;
 
 app.use(express.json());
 
 app.use("/v1",  endpointRoutes)
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+app.listen(config.PORT, () => {
+  console.log(`Server is running on http://localhost:${config.PORT}`);
 });   
