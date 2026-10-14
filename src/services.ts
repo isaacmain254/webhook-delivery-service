@@ -3,7 +3,7 @@ import { type User, WebhookEndpoint } from "./generated/prisma/client.js";
 
 export async function createUser(user: User) {
   return await prisma.user.create({
-    data: { username: user.username, apikey: user.apikey },
+    data: { username: user.username, apiKeyHash: user.apiKeyHash },
   });
 }
 

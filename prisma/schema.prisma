@@ -13,10 +13,12 @@ datasource db {
 }
 
 model User {
-  id        String            @id @default(uuid())
-  username  String            @unique
-  apikey    String
-  endpoints WebhookEndpoint[]
+  id         String            @id @default(uuid())
+  username   String            @unique
+  apiKeyHash String
+  endpoints  WebhookEndpoint[]
+  events     Event[]
+  deliveries Delivery[]
 }
 
 // Stores the webhook destination registered by a user.
@@ -39,31 +41,51 @@ model Subscription {
   endpointId String
   event      String[]
   endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@unique([endpointId])
 }
 
 // Stores the original event submitted by the client.
 model Event {
   id             String     @id @default(uuid())
+  userId         String
   idempotencyKey String
   event          String
   payload        Json
   createdOn      DateTime   @default(now())
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   deliveries     Delivery[]
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId])
 }
 
 // Represents the attempt to deliver a particular event to a particular endpoint.
 model Delivery {
-  id          String          @id @default(uuid())
-  eventId     String
-  endpointId  String
-  status      DeliveryStatus
-  retryCount  Int?
-  nextAttempt DateTime?
-  statusCode  String?
-  response    String?
-  duration    String?
-  event       Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  id            String             @id @default(uuid())
+  userId        String
+  eventId       String
+  endpointId    String
+  status        DeliveryStatus
+  retryCount    Int?
+  nextAttempt   DateTime?
+  lockedUntil   DateTime?
+  lockedBy      String?
+  statusCode    String?
+  response      String?
+  duration      String?
+  event         Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  endpoint      WebhookEndpoint    @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempts      DeliveryAttempts[]
+  outboxRecords OutboxRecord[]
+
+  @@unique([eventId, endpointId])
+  @@index([status])
+  @@index([lockedUntil])
+  @@index([status, lockedUntil])
+  @@index([userId])
+  @@index([endpointId])
 }
 
 // Records each individual HTTP delivery attempt.
@@ -76,6 +98,20 @@ model DeliveryAttempts {
   statusCode   String?
   response     String?
   duration     String
+  delivery     Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+}
+
+model OutboxRecord {
+  id          String    @id @default(uuid())
+  deliveryId  String    @unique
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  delivery    Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([published, createdAt])
 }
 
 enum EndpointStatus {
@@ -87,6 +123,6 @@ enum DeliveryStatus {
   PENDING
   PROCESSING
   RETRYING
-  SUCCEED
+  SUCCEEDED
   FAILED
 }

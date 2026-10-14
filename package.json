@@ -9,6 +9,7 @@
     "prebuild": "npm run prisma:generate",
     "build": "tsc",
     "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
     "start": "node dist/index.js",
     "worker": "tsx watch src/worker.ts",
     "worker:start": "node dist/worker.js",
