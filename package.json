@@ -1,0 +1,47 @@
+{
+  "name": "webhook-delivery-service",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "predev": "npm run prisma:generate",
+    "dev": "tsx watch src/index.ts",
+    "prebuild": "npm run prisma:generate",
+    "build": "tsc",
+    "prisma:generate": "prisma generate",
+    "start": "node dist/index.js",
+    "worker": "tsx watch src/worker.ts",
+    "worker:start": "node dist/worker.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@scalar/express-api-reference": "^0.10.29",
+    "bullmq": "^6.3.15",
+    "dotenv": "^18.0.7",
+    "express": "^5.3.0",
+    "ioredis": "^6.0.0",
+    "pg": "^8.23.1",
+    "prisma": "^7.10.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^5.0.4",
+    "msw": "^3.0.3",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4"
+  }
+}

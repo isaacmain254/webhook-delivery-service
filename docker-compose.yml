@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-webhook_service_user}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-webhook_service_password}
+      POSTGRES_DB: ${DATABASE_NAME:-webhook_service_database}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'pg_isready -U "$${DATABASE_USER}" -d "$${DATABASE_NAME}"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${DATABASE_USER:-webhook_service_user}:${DATABASE_PASSWORD:-webhook_service_password}@postgres:5432/${DATABASE_NAME:-webhook_service_database}?schema=public
+      NODE_ENV: production
+      PORT: ${PORT:-5000}
+    ports:
+      - "${PORT:-5000}:${PORT:-5000}"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-5000}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  redis_data:

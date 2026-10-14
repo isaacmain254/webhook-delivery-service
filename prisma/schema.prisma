@@ -1,0 +1,92 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String            @id @default(uuid())
+  username  String            @unique
+  apikey    String
+  endpoints WebhookEndpoint[]
+}
+
+// Stores the webhook destination registered by a user.
+model WebhookEndpoint {
+  id            String         @id @default(uuid())
+  owner         String
+  url           String
+  signingSecret String
+  status        EndpointStatus
+  createdOn     DateTime       @default(now())
+  updatedOn     DateTime       @updatedAt
+  user          User           @relation(fields: [owner], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+  deliveries    Delivery[]
+}
+
+// Connects endpoints to event types they want to receive.
+model Subscription {
+  id         String          @id @default(uuid())
+  endpointId String
+  event      String[]
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+}
+
+// Stores the original event submitted by the client.
+model Event {
+  id             String     @id @default(uuid())
+  idempotencyKey String
+  event          String
+  payload        Json
+  createdOn      DateTime   @default(now())
+  deliveries     Delivery[]
+}
+
+// Represents the attempt to deliver a particular event to a particular endpoint.
+model Delivery {
+  id          String          @id @default(uuid())
+  eventId     String
+  endpointId  String
+  status      DeliveryStatus
+  retryCount  Int?
+  nextAttempt DateTime?
+  statusCode  String?
+  response    String?
+  duration    String?
+  event       Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  endpoint    WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+}
+
+// Records each individual HTTP delivery attempt.
+model DeliveryAttempts {
+  id           Int       @id @default(autoincrement())
+  deliveryId   String
+  attemptCount Int
+  startedAt    DateTime
+  completedAt  DateTime?
+  statusCode   String?
+  response     String?
+  duration     String
+}
+
+enum EndpointStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DeliveryStatus {
+  PENDING
+  PROCESSING
+  RETRYING
+  SUCCEED
+  FAILED
+}
