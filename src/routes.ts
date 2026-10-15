@@ -1,5 +1,8 @@
 import { Router, type Request, type Response } from 'express'
 import { createUser } from './controllers.js'
+import { authenticateApiKey } from './api/middleware/authenticate-api-key.js'
+import { validateRequest } from './api/middleware/validate-request.js'
+import { createUserRequestSchema } from './schemas/user.schema.js'
 
 const router = Router()
 
@@ -11,7 +14,10 @@ router.get("/health", (req: Request, res: Response) => {
     res.json({status: 200, message: "Healthy..."})
 })
 // POST /v1/users   Create a user
-router.post("/users", createUser)
+router.post("/users", validateRequest(createUserRequestSchema), createUser)
+
+// All resource routes below this point require a valid user API key.
+router.use(authenticateApiKey)
 
 // POST	/v1/endpoints	Register a webhook endpoint
 router.post("/endpoints", notImplemented)

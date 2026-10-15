@@ -12,3 +12,5 @@ skills-lock.json
 .gitkeep
 
 *.md
+
+dist/*

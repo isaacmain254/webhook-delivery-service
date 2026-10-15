@@ -9,8 +9,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npx prisma generate
-RUN npm run build
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build npm run build
 
 FROM node:24-alpine AS runtime
 

@@ -1,9 +1,10 @@
 import prisma from "./db.js";
-import { type User, WebhookEndpoint } from "./generated/prisma/client.js";
+import { type WebhookEndpoint } from "./generated/prisma/client.js";
 
-export async function createUser(user: User) {
+export async function createUser(username: string, apiKeyHash: string) {
   return await prisma.user.create({
-    data: { username: user.username, apiKeyHash: user.apiKeyHash },
+    data: { username, apiKeyHash },
+    select: { id: true, username: true },
   });
 }
 
