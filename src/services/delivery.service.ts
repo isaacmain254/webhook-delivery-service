@@ -45,6 +45,7 @@ export interface ProcessDeliveryOptions {
 interface ClaimedDelivery {
   deliveryId: string
   attemptNumber: number
+  replayCount: number
 }
 
 interface DeliveryOutcomeInput {
@@ -77,7 +78,8 @@ export async function claimDelivery(
       AND ("nextAttempt" IS NULL OR "nextAttempt" <= now())
       AND ("lockedUntil" IS NULL OR "lockedUntil" <= now())
     RETURNING "id" AS "deliveryId",
-              COALESCE("retryCount", 0) + 1 AS "attemptNumber"
+              COALESCE("retryCount", 0) + 1 AS "attemptNumber",
+              "replayCount" AS "replayCount"
   `
 
   return rows[0] ?? null
@@ -228,6 +230,7 @@ export async function processDeliveryJob(
     const attempt = await prisma.deliveryAttempts.create({
       data: {
         deliveryId,
+        replayCount: claim.replayCount,
         attemptCount: claim.attemptNumber,
         startedAt,
         duration: '0',

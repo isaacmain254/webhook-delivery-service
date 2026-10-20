@@ -1,10 +1,18 @@
-import type { RequestHandler } from "express";
+import type { RequestHandler, Response } from "express";
 import type { EventType } from "../../lib/events.js";
 import {
   EventPayloadTooLargeError,
   ingestEvent,
 } from "../../services/event.service.js";
-import { authenticatedUserId } from "./helpers.js";
+import {
+  getEventDetailForUser,
+  listEventDeliveriesForUser,
+} from "../../services/delivery-inspection.service.js";
+import { authenticatedUserId, routeParam } from "./helpers.js";
+
+function sendEventNotFound(res: Response): void {
+  res.status(404).json({ error: { code: "NOT_FOUND", message: "Event not found" } });
+}
 
 interface CreateEventBody {
   idempotencyKey: string;
@@ -51,6 +59,42 @@ export const createEvent: RequestHandler = async (req, res, next) => {
       return;
     }
 
+    next(error);
+  }
+};
+
+export const getEvent: RequestHandler = async (req, res, next) => {
+  try {
+    const event = await getEventDetailForUser(
+      authenticatedUserId(req),
+      routeParam(req, "id"),
+    );
+
+    if (!event) {
+      sendEventNotFound(res);
+      return;
+    }
+
+    res.json(event);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const listEventDeliveries: RequestHandler = async (req, res, next) => {
+  try {
+    const deliveries = await listEventDeliveriesForUser(
+      authenticatedUserId(req),
+      routeParam(req, "id"),
+    );
+
+    if (!deliveries) {
+      sendEventNotFound(res);
+      return;
+    }
+
+    res.json(deliveries);
+  } catch (error) {
     next(error);
   }
 };

@@ -68,6 +68,7 @@ model Delivery {
   endpointId    String
   status        DeliveryStatus
   retryCount    Int?
+  replayCount   Int                @default(0)
   nextAttempt   DateTime?
   lockedUntil   DateTime?
   lockedBy      String?
@@ -92,6 +93,7 @@ model Delivery {
 model DeliveryAttempts {
   id           Int       @id @default(autoincrement())
   deliveryId   String
+  replayCount  Int       @default(0)
   attemptCount Int
   startedAt    DateTime
   completedAt  DateTime?
@@ -100,6 +102,7 @@ model DeliveryAttempts {
   duration     String
   delivery     Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
+  @@unique([deliveryId, replayCount, attemptCount])
   @@index([deliveryId])
 }
 

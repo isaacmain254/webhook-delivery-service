@@ -238,6 +238,7 @@ describe('delivery worker', () => {
 
     const attempt = stored.attempts[0]
     expect(attempt?.attemptCount).toBe(1)
+    expect(attempt?.replayCount).toBe(0)
     expect(attempt?.startedAt).toBeInstanceOf(Date)
     expect(attempt?.completedAt).toBeInstanceOf(Date)
     expect(attempt?.statusCode).toBe('200')
