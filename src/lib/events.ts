@@ -20,7 +20,11 @@ export const EVENT_TYPES = [
 
 export type EventType = (typeof EVENT_TYPES)[number]
 
-export const eventTypeSchema = z.enum(EVENT_TYPES)
+export const eventTypeSchema = z.enum(EVENT_TYPES).meta({
+  id: 'EventType',
+  description: 'Supported payment event type',
+  example: 'payment.succeeded',
+})
 
 export function isEventType(value: string): value is EventType {
   return (EVENT_TYPES as readonly string[]).includes(value)
