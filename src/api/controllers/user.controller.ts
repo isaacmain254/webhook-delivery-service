@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express'
-import { generateApiKey, hashApiKey } from './lib/crypto.js'
-import config from './config.js'
-import { createUser as persistUser } from './services.js'
+import { generateApiKey, hashApiKey } from '../../lib/crypto.js'
+import config from '../../config.js'
+import { createUser as persistUser } from '../../services/user.service.js'
 
 function isUniqueConstraintError(error: unknown): boolean {
   return (

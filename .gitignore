@@ -13,4 +13,7 @@ skills-lock.json
 
 *.md
 
+# Temporary files created by the Vitest test-database lifecycle
+tests/.tmp/
+
 dist/*

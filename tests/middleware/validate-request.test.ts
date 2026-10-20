@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { validateRequest } from './validate-request.js'
+import { validateRequest } from '../../src/api/middleware/validate-request.js'
 
 describe('validateRequest', () => {
   it('passes parsed body, params, and query values to the route handler', async () => {

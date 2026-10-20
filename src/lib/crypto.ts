@@ -7,3 +7,7 @@ export function generateApiKey(): string {
 export function hashApiKey(apiKey: string, pepper: string): string {
   return createHash('sha256').update(apiKey + pepper).digest('hex')
 }
+
+export function generateSigningSecret(): string {
+  return randomBytes(32).toString('hex')
+}
