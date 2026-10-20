@@ -89,6 +89,30 @@ describe('createBullMqDeliveryQueue', () => {
     )
   })
 
+  it('passes a positive retry delay through to BullMQ', async () => {
+    const queue = createBullMqDeliveryQueue()
+
+    await queue.enqueue('delivery-1', 'job-1', { delayMs: 1_234.4 })
+
+    expect(mocks.add).toHaveBeenCalledWith(
+      DELIVERY_JOB_NAME,
+      { deliveryId: 'delivery-1' },
+      { jobId: 'job-1', delay: 1_235 },
+    )
+  })
+
+  it('omits a zero delay so initial deliveries run immediately', async () => {
+    const queue = createBullMqDeliveryQueue()
+
+    await queue.enqueue('delivery-1', 'job-1', { delayMs: 0 })
+
+    expect(mocks.add).toHaveBeenCalledWith(
+      DELIVERY_JOB_NAME,
+      { deliveryId: 'delivery-1' },
+      { jobId: 'job-1' },
+    )
+  })
+
   it('reports whether a job is retained by the queue', async () => {
     mocks.getJob.mockResolvedValueOnce({ id: 'job-1' })
     mocks.getJob.mockResolvedValueOnce(undefined)

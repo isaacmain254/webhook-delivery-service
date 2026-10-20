@@ -18,14 +18,22 @@ const app = createTestApp()
 const publicHost = 'https://93.184.216.34'
 
 class FakeDeliveryQueue implements DeliveryQueue {
-  readonly calls: Array<{ deliveryId: string; jobId: string }> = []
+  readonly calls: Array<{ deliveryId: string; jobId: string; delayMs?: number }> = []
   readonly jobs = new Map<string, string>()
   failNext = false
   gate: Promise<void> | null = null
   onEnqueue: (() => void) | undefined
 
-  async enqueue(deliveryId: string, jobId: string): Promise<void> {
-    this.calls.push({ deliveryId, jobId })
+  async enqueue(
+    deliveryId: string,
+    jobId: string,
+    options?: { delayMs?: number },
+  ): Promise<void> {
+    this.calls.push({
+      deliveryId,
+      jobId,
+      ...(options?.delayMs ? { delayMs: options.delayMs } : {}),
+    })
     this.onEnqueue?.()
 
     if (this.gate) {
@@ -144,6 +152,32 @@ describe('transactional outbox dispatcher', () => {
     expect(stored.publishedAt).not.toBeNull()
     expect(stored.lockedUntil).toBeNull()
     expect(stored.lockedBy).toBeNull()
+  })
+
+  it('delays publication until the delivery nextAttempt time', async () => {
+    const created = await createDelivery()
+    const nextAttempt = new Date(Date.now() + 60_000)
+    await prisma.delivery.update({
+      where: { id: created.deliveryId },
+      data: {
+        status: 'RETRYING',
+        retryCount: 1,
+        nextAttempt,
+      },
+    })
+
+    const queue = new FakeDeliveryQueue()
+    const summary = await dispatchOutboxBatch({
+      queue,
+      batchSize: 10,
+      leaseDurationMs: 5_000,
+    })
+
+    expect(summary).toEqual({ claimed: 1, published: 1, failed: 0 })
+    expect(queue.calls).toHaveLength(1)
+    expect(queue.calls[0]?.jobId).toBe(jobIdFor(created))
+    expect(queue.calls[0]?.delayMs).toBeGreaterThan(50_000)
+    expect(queue.calls[0]?.delayMs).toBeLessThanOrEqual(60_000)
   })
 
   it('leaves records unpublished and retryable while Redis is unavailable', async () => {

@@ -10,6 +10,7 @@ export interface ClaimedOutboxRecord {
   id: string
   deliveryId: string
   generation: number
+  nextAttempt: Date | string | null
 }
 
 export interface ClaimOutboxOptions {
@@ -58,10 +59,10 @@ export async function claimOutboxBatch(
   const claimToken = options.claimToken ?? `outbox-${randomUUID()}`
 
   return prisma.$queryRaw<ClaimedOutboxRecord[]>`
-    UPDATE "OutboxRecord"
+    UPDATE "OutboxRecord" AS outbox
     SET "lockedUntil" = now() + (${options.leaseDurationMs}::int * interval '1 millisecond'),
         "lockedBy" = ${claimToken}
-    WHERE "id" IN (
+    WHERE outbox."id" IN (
       SELECT "id"
       FROM "OutboxRecord"
       WHERE "published" = false
@@ -70,24 +71,58 @@ export async function claimOutboxBatch(
       LIMIT ${options.batchSize}
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING "id", "deliveryId", "generation"
+    RETURNING outbox."id",
+              outbox."deliveryId",
+              outbox."generation",
+              (
+                SELECT delivery."nextAttempt"
+                FROM "Delivery" AS delivery
+                WHERE delivery."id" = outbox."deliveryId"
+              ) AS "nextAttempt"
   `
 }
 
-async function markOutboxPublished(id: string, claimToken: string, now: Date): Promise<boolean> {
+async function markOutboxPublished(
+  id: string,
+  generation: number,
+  claimToken: string,
+  now: Date,
+): Promise<boolean> {
   const result = await prisma.outboxRecord.updateMany({
-    where: { id, published: false, lockedBy: claimToken },
+    where: { id, generation, published: false, lockedBy: claimToken },
     data: { published: true, publishedAt: now, lockedUntil: null, lockedBy: null },
   })
 
   return result.count === 1
 }
 
-async function releaseOutboxClaim(id: string, claimToken: string): Promise<void> {
+async function releaseOutboxClaim(
+  id: string,
+  generation: number,
+  claimToken: string,
+): Promise<void> {
   await prisma.outboxRecord.updateMany({
-    where: { id, published: false, lockedBy: claimToken },
+    where: { id, generation, published: false, lockedBy: claimToken },
     data: { lockedUntil: null, lockedBy: null },
   })
+}
+
+function publicationDelayMs(record: ClaimedOutboxRecord): number | undefined {
+  if (record.nextAttempt === null) {
+    return undefined
+  }
+
+  const nextAttemptMs =
+    record.nextAttempt instanceof Date
+      ? record.nextAttempt.getTime()
+      : new Date(record.nextAttempt).getTime()
+
+  if (!Number.isFinite(nextAttemptMs)) {
+    return undefined
+  }
+
+  const delayMs = nextAttemptMs - Date.now()
+  return delayMs > 0 ? delayMs : undefined
 }
 
 /**
@@ -108,12 +143,21 @@ export async function dispatchOutboxBatch(
 
   for (const record of records) {
     try {
+      const delayMs = publicationDelayMs(record)
       await options.queue.enqueue(
         record.deliveryId,
         deliveryJobId(record.id, record.generation),
+        delayMs === undefined ? undefined : { delayMs },
       )
 
-      if (await markOutboxPublished(record.id, claimToken, new Date())) {
+      if (
+        await markOutboxPublished(
+          record.id,
+          record.generation,
+          claimToken,
+          new Date(),
+        )
+      ) {
         published += 1
       } else {
         // The lease expired and another dispatcher took over. It publishes the
@@ -124,7 +168,7 @@ export async function dispatchOutboxBatch(
       }
     } catch (error) {
       failed += 1
-      await releaseOutboxClaim(record.id, claimToken).catch((releaseError) => {
+      await releaseOutboxClaim(record.id, record.generation, claimToken).catch((releaseError) => {
         console.error('[outbox] Failed to release claim', {
           outboxId: record.id,
           error: releaseError,

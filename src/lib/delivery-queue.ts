@@ -4,9 +4,22 @@ import config from '../config.js'
 export const DELIVERY_QUEUE_NAME = 'webhook-deliveries'
 export const DELIVERY_JOB_NAME = 'deliver'
 
+export interface DeliveryJobData {
+  deliveryId: string
+}
+
+export interface DeliveryQueueEnqueueOptions {
+  /** Delay publication inside BullMQ. Used when a delivery is not yet due. */
+  delayMs?: number
+}
+
 export interface DeliveryQueue {
   /** Adds one delivery job. BullMQ ignores duplicate job IDs that still exist. */
-  enqueue(deliveryId: string, jobId: string): Promise<void>
+  enqueue(
+    deliveryId: string,
+    jobId: string,
+    options?: DeliveryQueueEnqueueOptions,
+  ): Promise<void>
   /** True while a job with this ID is retained by BullMQ. */
   hasJob(jobId: string): Promise<boolean>
   close(): Promise<void>
@@ -29,7 +42,7 @@ export function deliveryJobId(outboxRecordId: string, generation: number): strin
  * attempts are disabled so application policy owns the delivery retry budget.
  */
 export function createBullMqDeliveryQueue(): DeliveryQueue {
-  const queue = new Queue<{ deliveryId: string }>(DELIVERY_QUEUE_NAME, {
+  const queue = new Queue<DeliveryJobData>(DELIVERY_QUEUE_NAME, {
     connection: {
       url: config.REDIS_URL,
       // Fail quickly while Redis is unavailable instead of holding a claim
@@ -48,8 +61,15 @@ export function createBullMqDeliveryQueue(): DeliveryQueue {
   })
 
   return {
-    async enqueue(deliveryId, jobId) {
-      await queue.add(DELIVERY_JOB_NAME, { deliveryId }, { jobId })
+    async enqueue(deliveryId, jobId, options) {
+      const delayMs = options?.delayMs
+      await queue.add(
+        DELIVERY_JOB_NAME,
+        { deliveryId },
+        delayMs !== undefined && delayMs > 0
+          ? { jobId, delay: Math.ceil(delayMs) }
+          : { jobId },
+      )
     },
 
     async hasJob(jobId) {

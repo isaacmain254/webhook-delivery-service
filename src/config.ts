@@ -22,6 +22,7 @@ const EnvSchema = z.object({
   INITIAL_RETRY_DELAY_MS: z.coerce.number().int().positive().default(1000),
   MAX_RETRY_DELAY_MS: z.coerce.number().int().positive().default(3_600_000),
   DELIVERY_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  MAX_RESPONSE_BODY_BYTES: z.coerce.number().int().positive().default(4_096),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
   LEASE_DURATION_MS: z.coerce.number().int().positive().default(120_000),
   REQUIRE_HTTPS_DESTINATIONS: z.stringbool().default(true),
