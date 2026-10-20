@@ -3,6 +3,7 @@ import { authenticateApiKey } from '../middleware/authenticate-api-key.js'
 import healthRouter from './health.routes.js'
 import userRouter from './user.routes.js'
 import endpointRouter from './endpoint.routes.js'
+import eventRouter from './event.routes.js'
 
 const router = Router()
 
@@ -17,9 +18,7 @@ router.use(userRouter)
 // All resource routes below this point require a valid user API key.
 router.use(authenticateApiKey)
 router.use(endpointRouter)
-
-// POST	/v1/events	Submit an event for delivery
-router.post('/events', notImplemented)
+router.use(eventRouter)
 
 // GET	/v1/events/:id	Inspect an event and its deliveries
 router.get('/events/:id', notImplemented)

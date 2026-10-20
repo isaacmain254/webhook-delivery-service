@@ -25,6 +25,8 @@ const EnvSchema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
   LEASE_DURATION_MS: z.coerce.number().int().positive().default(120_000),
   REQUIRE_HTTPS_DESTINATIONS: z.stringbool().default(true),
+  JSON_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
+  MAX_EVENT_PAYLOAD_BYTES: z.coerce.number().int().positive().default(65_536),
 })
 
 export type AppConfig = z.infer<typeof EnvSchema>
