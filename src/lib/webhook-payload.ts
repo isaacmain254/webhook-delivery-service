@@ -20,6 +20,7 @@ export type DeliveryErrorCode =
   | 'TIMEOUT'
   | 'NETWORK_ERROR'
   | 'DESTINATION_REJECTED'
+  | 'LEASE_EXPIRED'
 
 /**
  * The event envelope is serialized once and those exact bytes are signed and

@@ -4,6 +4,10 @@ import { createBullMqDeliveryQueue } from './lib/delivery-queue.js'
 import { startOutboxDispatcher } from './services/outbox.service.js'
 import { startSchedulingReconciler } from './services/reconciliation.service.js'
 import { createDeliveryWorker } from './workers/delivery.worker.js'
+import {
+  shutdownWorker,
+  type WorkerShutdownRuntime,
+} from './workers/shutdown.js'
 
 const queue = createBullMqDeliveryQueue()
 const deliveryWorker = createDeliveryWorker()
@@ -21,40 +25,48 @@ const reconciler = startSchedulingReconciler({
   batchSize: config.OUTBOX_RECONCILE_BATCH_SIZE,
 })
 
+const shutdownRuntime: WorkerShutdownRuntime = {
+  stopDispatcher: () => dispatcher.stop(),
+  stopReconciler: () => reconciler.stop(),
+  closeWorker: () => deliveryWorker.close(),
+  forceCloseWorker: () => deliveryWorker.close(true),
+  closeQueue: () => queue.close(),
+  disconnect: () => prisma.$disconnect(),
+}
+
 console.log('[worker] Delivery worker, outbox dispatcher, and reconciler started', {
   concurrency: config.WORKER_CONCURRENCY,
   pollIntervalMs: config.OUTBOX_POLL_INTERVAL_MS,
   batchSize: config.OUTBOX_BATCH_SIZE,
   reconcileIntervalMs: config.OUTBOX_RECONCILE_INTERVAL_MS,
+  shutdownTimeoutMs: config.WORKER_SHUTDOWN_TIMEOUT_MS,
 })
 
 let shuttingDown = false
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (shuttingDown) {
-    return
+    console.error(`[worker] Received ${signal} during shutdown; exiting immediately`)
+    process.exit(1)
   }
 
   shuttingDown = true
   console.log(`[worker] Received ${signal}; stopping delivery worker and outbox loops`)
 
-  await Promise.allSettled([dispatcher.stop(), reconciler.stop()])
-  await deliveryWorker.close().catch((error: unknown) => {
-    console.error('[worker] Failed to close the BullMQ worker', error)
-  })
-  await queue.close().catch((error: unknown) => {
-    console.error('[worker] Failed to close the delivery queue', error)
-  })
-  await prisma.$disconnect().catch((error: unknown) => {
-    console.error('[worker] Failed to disconnect Prisma', error)
-  })
-
-  process.exit(0)
+  try {
+    const result = await shutdownWorker(shutdownRuntime, {
+      timeoutMs: config.WORKER_SHUTDOWN_TIMEOUT_MS,
+    })
+    process.exit(result.clean ? 0 : 1)
+  } catch (error) {
+    console.error('[worker] Shutdown failed unexpectedly', error)
+    process.exit(1)
+  }
 }
 
-process.once('SIGINT', () => {
+process.on('SIGINT', () => {
   void shutdown('SIGINT')
 })
-process.once('SIGTERM', () => {
+process.on('SIGTERM', () => {
   void shutdown('SIGTERM')
 })

@@ -9,6 +9,7 @@ import {
   type WebhookHttpResponse,
 } from '../lib/delivery-http.js'
 import { signWebhook } from '../lib/hmac.js'
+import { computeRetryDelayMs, isRetryAllowed } from '../lib/retry.js'
 import { SsrfError } from '../lib/ssrf.js'
 import {
   buildErrorSummary,
@@ -18,12 +19,17 @@ import {
   type DeliveryAttemptOutcome,
   type DeliveryErrorCode,
 } from '../lib/webhook-payload.js'
-import type { Prisma } from '../generated/prisma/client.js'
+import { resetOutboxForDelivery } from './outbox.service.js'
 
 const DEFAULT_WORKER_ID = `${hostname()}:${process.pid}:${randomUUID()}`
 const defaultTransport = createHttpDeliveryTransport()
 
-export type DeliveryProcessOutcome = 'succeeded' | 'retrying' | 'failed' | 'skipped'
+export type DeliveryProcessOutcome =
+  | 'succeeded'
+  | 'retrying'
+  | 'failed'
+  | 'skipped'
+  | 'lost_claim'
 
 export interface DeliveryProcessResult {
   deliveryId: string
@@ -48,6 +54,7 @@ interface DeliveryOutcomeInput {
   statusCode: number | null
   responseSummary: string
   durationMs: number
+  retryAfter?: string | null
 }
 
 /**
@@ -76,33 +83,15 @@ export async function claimDelivery(
   return rows[0] ?? null
 }
 
-async function resetOutboxForRetry(
-  tx: Prisma.TransactionClient,
-  deliveryId: string,
-): Promise<void> {
-  const updated = await tx.outboxRecord.updateMany({
-    where: { deliveryId },
-    data: {
-      published: false,
-      publishedAt: null,
-      generation: { increment: 1 },
-      lockedUntil: null,
-      lockedBy: null,
-    },
-  })
-
-  if (updated.count === 0) {
-    await tx.outboxRecord.create({ data: { deliveryId } })
-  }
-}
-
 async function recordOutcome(
   deliveryId: string,
+  workerId: string,
   input: DeliveryOutcomeInput,
 ): Promise<DeliveryProcessOutcome> {
   const completedAt = new Date()
-  const retryLimitReached = input.attemptNumber >= config.MAX_DELIVERY_ATTEMPTS
-  const scheduleRetry = input.outcome === 'retryable' && !retryLimitReached
+  const scheduleRetry =
+    input.outcome === 'retryable' &&
+    isRetryAllowed(input.attemptNumber, config.MAX_DELIVERY_ATTEMPTS)
   const status =
     input.outcome === 'succeeded'
       ? 'SUCCEEDED'
@@ -110,12 +99,25 @@ async function recordOutcome(
         ? 'RETRYING'
         : 'FAILED'
   const nextAttempt = scheduleRetry
-    ? new Date(completedAt.getTime() + config.INITIAL_RETRY_DELAY_MS)
+    ? new Date(
+        completedAt.getTime() +
+          computeRetryDelayMs({
+            attemptNumber: input.attemptNumber,
+            initialDelayMs: config.INITIAL_RETRY_DELAY_MS,
+            maxDelayMs: config.MAX_RETRY_DELAY_MS,
+            retryAfter: input.retryAfter,
+            now: completedAt,
+          }),
+      )
     : null
   const statusCode = input.statusCode === null ? null : String(input.statusCode)
   const duration = String(input.durationMs)
 
+  let recorded = false
+
   await prisma.$transaction(async (tx) => {
+    // The attempt is always recorded, even if a recovered lease means this
+    // late result can no longer change the delivery state.
     await tx.deliveryAttempts.update({
       where: { id: input.attemptId },
       data: {
@@ -126,8 +128,12 @@ async function recordOutcome(
       },
     })
 
-    await tx.delivery.update({
-      where: { id: deliveryId },
+    const updated = await tx.delivery.updateMany({
+      where: {
+        id: deliveryId,
+        lockedBy: workerId,
+        status: 'PROCESSING',
+      },
       data: {
         status,
         ...(scheduleRetry ? { retryCount: input.attemptNumber } : {}),
@@ -140,10 +146,20 @@ async function recordOutcome(
       },
     })
 
+    if (updated.count === 0) {
+      return
+    }
+
+    recorded = true
+
     if (scheduleRetry) {
-      await resetOutboxForRetry(tx, deliveryId)
+      await resetOutboxForDelivery(tx, deliveryId)
     }
   })
+
+  if (!recorded) {
+    return 'lost_claim'
+  }
 
   if (status === 'SUCCEEDED') {
     return 'succeeded'
@@ -170,7 +186,7 @@ async function releaseFailedClaim(deliveryId: string, workerId: string): Promise
     })
 
     if (released.count === 1) {
-      await resetOutboxForRetry(tx, deliveryId)
+      await resetOutboxForDelivery(tx, deliveryId)
     }
   })
 }
@@ -267,13 +283,14 @@ export async function processDeliveryJob(
       ? buildErrorSummary(failureCode)
       : buildResponseSummary(response?.body ?? '', response?.truncated ?? false)
 
-    const processOutcome = await recordOutcome(deliveryId, {
+    const processOutcome = await recordOutcome(deliveryId, workerId, {
       attemptId: attempt.id,
       attemptNumber: claim.attemptNumber,
       outcome,
       statusCode: response?.statusCode ?? null,
       responseSummary,
       durationMs,
+      retryAfter: response?.retryAfter ?? null,
     })
 
     return {

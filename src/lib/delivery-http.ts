@@ -19,6 +19,8 @@ export interface WebhookHttpResponse {
   statusCode: number
   body: string
   truncated: boolean
+  /** Raw Retry-After header; parsed by the application retry policy. */
+  retryAfter?: string | null
 }
 
 export interface DeliveryTransport {
@@ -126,10 +128,14 @@ function sendHttpRequest(
 
         const complete = (): void => {
           finish(() => {
+            const retryAfterHeader = response.headers['retry-after']
             resolve({
               statusCode: response.statusCode ?? 0,
               body: Buffer.concat(chunks).toString('utf8'),
               truncated,
+              retryAfter: Array.isArray(retryAfterHeader)
+                ? (retryAfterHeader[0] ?? null)
+                : (retryAfterHeader ?? null),
             })
           })
         }

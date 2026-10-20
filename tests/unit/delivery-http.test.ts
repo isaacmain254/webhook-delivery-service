@@ -87,7 +87,12 @@ describe('HTTP delivery transport', () => {
 
     const response = await localTransport().send(request(baseUrl))
 
-    expect(response).toEqual({ statusCode: 200, body: 'ok', truncated: false })
+    expect(response).toEqual({
+      statusCode: 200,
+      body: 'ok',
+      truncated: false,
+      retryAfter: null,
+    })
     expect(received).toEqual({
       method: 'POST',
       headers: expect.objectContaining({
@@ -110,7 +115,24 @@ describe('HTTP delivery transport', () => {
       request(baseUrl),
     )
 
-    expect(response).toEqual({ statusCode: 200, body: '0123', truncated: true })
+    expect(response).toEqual({
+      statusCode: 200,
+      body: '0123',
+      truncated: true,
+      retryAfter: null,
+    })
+  })
+
+  it('exposes a Retry-After response header for the retry policy', async () => {
+    const { baseUrl } = await startServer((_req, res) => {
+      res.writeHead(429, { 'retry-after': '7' })
+      res.end('slow down')
+    })
+
+    const response = await localTransport().send(request(baseUrl))
+
+    expect(response.statusCode).toBe(429)
+    expect(response.retryAfter).toBe('7')
   })
 
   it('rejects with TIMEOUT when the receiver does not finish in time', async () => {

@@ -56,5 +56,8 @@ describe('webhook payload helpers', () => {
       truncated: true,
     })
     expect(JSON.parse(buildErrorSummary('TIMEOUT'))).toEqual({ error: 'TIMEOUT' })
+    expect(JSON.parse(buildErrorSummary('LEASE_EXPIRED'))).toEqual({
+      error: 'LEASE_EXPIRED',
+    })
   })
 })

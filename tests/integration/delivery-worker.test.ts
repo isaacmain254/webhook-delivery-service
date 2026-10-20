@@ -16,6 +16,7 @@ import { verifyWebhookSignature } from '../../src/lib/hmac.js'
 import { SsrfError } from '../../src/lib/ssrf.js'
 import { processDeliveryJob } from '../../src/services/delivery.service.js'
 import { dispatchOutboxBatch } from '../../src/services/outbox.service.js'
+import { reconcileScheduling } from '../../src/services/reconciliation.service.js'
 import { createTestApp } from '../helpers/test-app.js'
 import { registerUser, uniqueUsername, type TestUser } from '../helpers/users.js'
 
@@ -318,6 +319,42 @@ describe('delivery worker', () => {
     expect(scheduled.generation).toBe(1)
   })
 
+  it('honors a bounded Retry-After header on HTTP 429', async () => {
+    const created = await createDelivery()
+    await publishDelivery(created)
+    const transport = new FakeTransport()
+    transport.response = {
+      statusCode: 429,
+      body: 'rate limited',
+      truncated: false,
+      retryAfter: '2',
+    }
+
+    const before = Date.now()
+    const result = await processDeliveryJob(created.deliveryId, {
+      workerId: 'worker-retry-after',
+      transport,
+    })
+    const after = Date.now()
+
+    expect(result.outcome).toBe('retrying')
+
+    const stored = await prisma.delivery.findUniqueOrThrow({
+      where: { id: created.deliveryId },
+      include: { outboxRecords: true },
+    })
+    expect(stored.status).toBe('RETRYING')
+    expect(stored.retryCount).toBe(1)
+    expect(stored.nextAttempt).toBeInstanceOf(Date)
+
+    const delayMs = (stored.nextAttempt?.getTime() ?? 0) - before
+    const elapsedMs = after - before
+    expect(delayMs).toBeGreaterThanOrEqual(2_000)
+    expect(delayMs).toBeLessThanOrEqual(2_000 + elapsedMs + 1_000)
+    expect(stored.outboxRecords[0]?.published).toBe(false)
+    expect(stored.outboxRecords[0]?.generation).toBe(1)
+  })
+
   it('records timeouts as retryable failures without a status code', async () => {
     const created = await createDelivery()
     await publishDelivery(created)
@@ -465,6 +502,67 @@ describe('delivery worker', () => {
     expect(stored.outboxRecords[0]?.published).toBe(false)
     expect(stored.outboxRecords[0]?.generation).toBe(1)
     expect(stored.attempts).toHaveLength(1)
+  })
+
+  it('does not let a late worker overwrite a recovered lease', async () => {
+    const created = await createDelivery()
+    await publishDelivery(created)
+    const transport = new FakeTransport()
+
+    let releaseRequest: () => void = () => {}
+    transport.gate = new Promise<void>((resolve) => {
+      releaseRequest = resolve
+    })
+
+    let signalRequest: () => void = () => {}
+    const requestStarted = new Promise<void>((resolve) => {
+      signalRequest = resolve
+    })
+    transport.onRequest = signalRequest
+
+    const first = processDeliveryJob(created.deliveryId, {
+      workerId: 'worker-that-stalled',
+      transport,
+    })
+    await requestStarted
+
+    await prisma.delivery.update({
+      where: { id: created.deliveryId },
+      data: {
+        lockedBy: 'worker-that-stalled',
+        lockedUntil: new Date(Date.now() - 1_000),
+      },
+    })
+
+    const queue = new FakeDeliveryQueue()
+    const recovery = await reconcileScheduling({
+      queue,
+      batchSize: 10,
+      now: new Date(),
+    })
+    expect(recovery.recoveredLeases).toBe(1)
+
+    releaseRequest()
+    await expect(first).resolves.toEqual({
+      deliveryId: created.deliveryId,
+      outcome: 'lost_claim',
+      attemptCount: 1,
+    })
+
+    const stored = await prisma.delivery.findUniqueOrThrow({
+      where: { id: created.deliveryId },
+      include: { attempts: true, outboxRecords: true },
+    })
+    expect(stored.status).toBe('RETRYING')
+    expect(stored.retryCount).toBe(1)
+    expect(stored.nextAttempt).toBeInstanceOf(Date)
+    expect(stored.lockedUntil).toBeNull()
+    expect(stored.lockedBy).toBeNull()
+    expect(stored.outboxRecords[0]?.published).toBe(false)
+    expect(stored.outboxRecords[0]?.generation).toBe(1)
+    expect(stored.attempts).toHaveLength(1)
+    expect(stored.attempts[0]?.completedAt).toBeInstanceOf(Date)
+    expect(stored.attempts[0]?.statusCode).toBe('200')
   })
 
   it('prevents concurrent workers and duplicate jobs from creating attempts', async () => {

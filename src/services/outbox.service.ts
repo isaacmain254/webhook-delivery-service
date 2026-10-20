@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import prisma from '../db.js'
 import config from '../config.js'
 import { deliveryJobId, type DeliveryQueue } from '../lib/delivery-queue.js'
+import type { Prisma } from '../generated/prisma/client.js'
 
 /** Safety cap so a large backlog cannot keep one polling tick busy forever. */
 const MAX_BATCHES_PER_RUN = 10
@@ -43,6 +44,32 @@ export interface OutboxDispatcherOptions extends DispatchOptions {
 export interface OutboxDispatcherHandle {
   runOnce(): Promise<DispatchSummary>
   stop(): Promise<void>
+}
+
+/**
+ * Makes a delivery dispatchable again in the same transaction that changes its
+ * delivery state. Bumping the generation gives the new scheduling cycle a new
+ * stable BullMQ job ID. Delivery and reconciliation recovery both use this
+ * helper so a missing outbox row is recreated consistently.
+ */
+export async function resetOutboxForDelivery(
+  tx: Prisma.TransactionClient,
+  deliveryId: string,
+): Promise<void> {
+  const updated = await tx.outboxRecord.updateMany({
+    where: { deliveryId },
+    data: {
+      published: false,
+      publishedAt: null,
+      generation: { increment: 1 },
+      lockedUntil: null,
+      lockedBy: null,
+    },
+  })
+
+  if (updated.count === 0) {
+    await tx.outboxRecord.create({ data: { deliveryId } })
+  }
 }
 
 /**
