@@ -1,11 +1,8 @@
 import { z } from 'zod'
 import { EVENT_TYPES, eventTypeSchema } from '../lib/events.js'
+import { emptyQuerySchema, uuidParamsSchema } from './common.schema.js'
 
 const destinationUrlSchema = z.url().max(2048)
-
-const endpointIdParamsSchema = z.object({
-  id: z.uuid(),
-})
 
 // `PUT /subscriptions` replaces the whole list, so duplicates are collapsed
 // into a single subscription entry instead of being rejected.
@@ -19,6 +16,11 @@ export const createEndpointRequestSchema = z.object({
     url: destinationUrlSchema,
     events: subscribedEventsSchema.optional(),
   }),
+  query: emptyQuerySchema,
+})
+
+export const listEndpointsRequestSchema = z.object({
+  query: emptyQuerySchema,
 })
 
 export const updateEndpointRequestSchema = z.object({
@@ -30,16 +32,19 @@ export const updateEndpointRequestSchema = z.object({
     .refine((body) => body.url !== undefined || body.status !== undefined, {
       message: 'Provide url and/or status',
     }),
-  params: endpointIdParamsSchema,
+  params: uuidParamsSchema,
+  query: emptyQuerySchema,
 })
 
 export const endpointParamsSchema = z.object({
-  params: endpointIdParamsSchema,
+  params: uuidParamsSchema,
+  query: emptyQuerySchema,
 })
 
 export const updateSubscriptionsRequestSchema = z.object({
   body: z.object({
     events: subscribedEventsSchema,
   }),
-  params: endpointIdParamsSchema,
+  params: uuidParamsSchema,
+  query: emptyQuerySchema,
 })

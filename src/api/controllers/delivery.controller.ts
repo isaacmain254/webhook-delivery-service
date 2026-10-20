@@ -1,76 +1,55 @@
-import type { RequestHandler, Response } from 'express'
+import { ConflictError, NotFoundError } from '../../lib/errors.js'
 import {
   getDeliveryDetailForUser,
   listDeliveryAttemptsForUser,
 } from '../../services/delivery-inspection.service.js'
 import { replayDeliveryForUser } from '../../services/delivery-replay.service.js'
+import { asyncHandler } from '../middleware/async-handler.js'
 import { authenticatedUserId, routeParam } from './helpers.js'
 
-function sendDeliveryNotFound(res: Response): void {
-  res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Delivery not found' } })
-}
+export const getDelivery = asyncHandler(async (req, res) => {
+  const delivery = await getDeliveryDetailForUser(
+    authenticatedUserId(req),
+    routeParam(req, 'id'),
+  )
 
-export const getDelivery: RequestHandler = async (req, res, next) => {
-  try {
-    const delivery = await getDeliveryDetailForUser(
-      authenticatedUserId(req),
-      routeParam(req, 'id'),
-    )
-
-    if (!delivery) {
-      sendDeliveryNotFound(res)
-      return
-    }
-
-    res.json(delivery)
-  } catch (error) {
-    next(error)
+  if (!delivery) {
+    throw new NotFoundError('Delivery not found')
   }
-}
 
-export const listDeliveryAttempts: RequestHandler = async (req, res, next) => {
-  try {
-    const attempts = await listDeliveryAttemptsForUser(
-      authenticatedUserId(req),
-      routeParam(req, 'id'),
-    )
+  res.json(delivery)
+})
 
-    if (!attempts) {
-      sendDeliveryNotFound(res)
-      return
-    }
+export const listDeliveryAttempts = asyncHandler(async (req, res) => {
+  const attempts = await listDeliveryAttemptsForUser(
+    authenticatedUserId(req),
+    routeParam(req, 'id'),
+  )
 
-    res.json(attempts)
-  } catch (error) {
-    next(error)
+  if (!attempts) {
+    throw new NotFoundError('Delivery not found')
   }
-}
 
-export const replayDelivery: RequestHandler = async (req, res, next) => {
-  try {
-    const result = await replayDeliveryForUser(
-      authenticatedUserId(req),
-      routeParam(req, 'id'),
-    )
+  res.json(attempts)
+})
 
-    if (result.outcome === 'not_found') {
-      sendDeliveryNotFound(res)
-      return
-    }
+export const replayDelivery = asyncHandler(async (req, res) => {
+  const result = await replayDeliveryForUser(
+    authenticatedUserId(req),
+    routeParam(req, 'id'),
+  )
 
-    if (result.outcome === 'conflict') {
-      res.status(409).json({
-        error: {
-          code: 'DELIVERY_NOT_REPLAYABLE',
-          message: 'Only FAILED and SUCCEEDED deliveries can be replayed',
-          details: [{ path: 'status', message: `Delivery status is ${result.status}` }],
-        },
-      })
-      return
-    }
-
-    res.status(202).json(result.delivery)
-  } catch (error) {
-    next(error)
+  if (result.outcome === 'not_found') {
+    throw new NotFoundError('Delivery not found')
   }
-}
+
+  if (result.outcome === 'conflict') {
+    throw new ConflictError(
+      'DELIVERY_NOT_REPLAYABLE',
+      'Only FAILED and SUCCEEDED deliveries can be replayed',
+      [{ path: 'status', message: `Delivery status is ${result.status}` }],
+    )
+  }
+
+  res.status(202).json(result.delivery)
+})

@@ -35,4 +35,14 @@ describe('loadConfig', () => {
       }),
     ).toThrow(/INITIAL_RETRY_DELAY_MS: must not exceed MAX_RETRY_DELAY_MS/)
   })
+
+  it('requires the event payload limit not to exceed the JSON body limit', () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        JSON_BODY_LIMIT_BYTES: '1024',
+        MAX_EVENT_PAYLOAD_BYTES: '2048',
+      }),
+    ).toThrow(/MAX_EVENT_PAYLOAD_BYTES: must not exceed JSON_BODY_LIMIT_BYTES/)
+  })
 })

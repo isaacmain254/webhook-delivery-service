@@ -11,6 +11,7 @@ import { validateRequest } from '../middleware/validate-request.js'
 import {
   createEndpointRequestSchema,
   endpointParamsSchema,
+  listEndpointsRequestSchema,
   updateEndpointRequestSchema,
   updateSubscriptionsRequestSchema,
 } from '../../schemas/endpoint.schema.js'
@@ -21,7 +22,11 @@ const endpointRouter = Router()
 endpointRouter.post('/endpoints', validateRequest(createEndpointRequestSchema), createEndpoint)
 
 // GET /v1/endpoints   List registered endpoints
-endpointRouter.get('/endpoints', listEndpoints)
+endpointRouter.get(
+  '/endpoints',
+  validateRequest(listEndpointsRequestSchema),
+  listEndpoints,
+)
 
 // GET /v1/endpoints/:id   Get endpoint by Id
 endpointRouter.get('/endpoints/:id', validateRequest(endpointParamsSchema), getEndpoint)

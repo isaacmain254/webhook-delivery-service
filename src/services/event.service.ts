@@ -3,19 +3,9 @@ import config from '../config.js'
 import type { Prisma } from '../generated/prisma/client.js'
 import type { DeliveryStatus } from '../generated/prisma/enums.js'
 import type { EventType } from '../lib/events.js'
+import { PayloadTooLargeError } from '../lib/errors.js'
 import { canonicalizeJson, fingerprintPayload } from '../lib/fingerprint.js'
-
-export class EventPayloadTooLargeError extends Error {
-  readonly byteLength: number
-  readonly limit: number
-
-  constructor(byteLength: number, limit: number) {
-    super(`Event payload is ${byteLength} bytes, exceeding the ${limit} byte limit`)
-    this.name = 'EventPayloadTooLargeError'
-    this.byteLength = byteLength
-    this.limit = limit
-  }
-}
+import { isUniqueConstraintError } from '../lib/prisma-errors.js'
 
 export interface CreateEventInput {
   idempotencyKey: string
@@ -81,15 +71,6 @@ function toEventDetail(row: Omit<EventLookupRow, 'payload'>): EventDetail {
   }
 }
 
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2002'
-  )
-}
-
 /**
  * An existing event with the same idempotency key is a replay only when its
  * content matches. Comparison uses the same canonical fingerprint as new
@@ -127,7 +108,15 @@ export async function ingestEvent(
   const canonical = canonicalizeJson(input.payload)
   const byteLength = Buffer.byteLength(canonical, 'utf8')
   if (byteLength > config.MAX_EVENT_PAYLOAD_BYTES) {
-    throw new EventPayloadTooLargeError(byteLength, config.MAX_EVENT_PAYLOAD_BYTES)
+    throw new PayloadTooLargeError(
+      `Event payload exceeds the configured ${config.MAX_EVENT_PAYLOAD_BYTES} byte limit`,
+      [
+        {
+          path: 'body.payload',
+          message: `Event payload is ${byteLength} bytes; maximum is ${config.MAX_EVENT_PAYLOAD_BYTES}`,
+        },
+      ],
+    )
   }
 
   const fingerprint = fingerprintPayload({ eventType: input.eventType, payload: input.payload })

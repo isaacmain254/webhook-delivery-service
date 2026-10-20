@@ -5,7 +5,7 @@ import {
   replayDelivery,
 } from '../controllers/delivery.controller.js'
 import { validateRequest } from '../middleware/validate-request.js'
-import { resourceIdParamsSchema } from '../../schemas/delivery.schema.js'
+import { resourceIdParamsSchema } from '../../schemas/common.schema.js'
 
 const deliveryRouter = Router()
 

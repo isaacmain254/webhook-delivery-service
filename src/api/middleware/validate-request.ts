@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express'
 import { z } from 'zod'
+import { ValidationError, zodErrorDetails } from '../../lib/errors.js'
 
 const requestSections = ['body', 'params', 'query'] as const
 type RequestSection = (typeof requestSections)[number]
@@ -26,16 +27,7 @@ export function validateRequest(schema: RequestSchema): RequestHandler {
     })
 
     if (!parsed.success) {
-      res.status(422).json({
-        error: {
-          code: 'VALIDATION_ERROR',
-          message: 'Request validation failed',
-          details: parsed.error.issues.map(({ path, message }) => ({
-            path: path.join('.'),
-            message,
-          })),
-        },
-      })
+      next(new ValidationError(zodErrorDetails(parsed.error)))
       return
     }
 

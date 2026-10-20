@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { ValidationError } from '../../src/lib/errors.js'
 import { validateRequest } from '../../src/api/middleware/validate-request.js'
 
 describe('validateRequest', () => {
@@ -25,22 +26,24 @@ describe('validateRequest', () => {
     expect(res.status).not.toHaveBeenCalled()
   })
 
-  it('returns the validation error response and does not call the handler for invalid input', async () => {
+  it('forwards a ValidationError and does not call the handler for invalid input', async () => {
     const req = { body: { username: 'ab' }, params: {}, query: {} } as unknown as Request
     const res = { status: vi.fn(), json: vi.fn() } as unknown as Response
     const next = vi.fn()
-    vi.mocked(res.status).mockReturnValue(res)
 
     validateRequest(z.object({ body: z.object({ username: z.string().min(3) }) }))(req, res, next)
 
-    expect(res.status).toHaveBeenCalledWith(422)
-    expect(res.json).toHaveBeenCalledWith({
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Request validation failed',
-        details: [{ path: 'body.username', message: expect.any(String) }],
-      },
+    expect(res.status).not.toHaveBeenCalled()
+    expect(res.json).not.toHaveBeenCalled()
+    expect(next).toHaveBeenCalledOnce()
+
+    const error = next.mock.calls[0]?.[0]
+    expect(error).toBeInstanceOf(ValidationError)
+    expect(error).toMatchObject({
+      statusCode: 422,
+      code: 'VALIDATION_ERROR',
+      message: 'Request validation failed',
+      details: [{ path: 'body.username', message: expect.any(String) }],
     })
-    expect(next).not.toHaveBeenCalled()
   })
 })

@@ -52,6 +52,14 @@ const EnvSchema = z
         message: 'must not exceed MAX_RETRY_DELAY_MS',
       })
     }
+
+    if (env.MAX_EVENT_PAYLOAD_BYTES > env.JSON_BODY_LIMIT_BYTES) {
+      context.addIssue({
+        code: 'custom',
+        path: ['MAX_EVENT_PAYLOAD_BYTES'],
+        message: 'must not exceed JSON_BODY_LIMIT_BYTES',
+      })
+    }
   })
 
 export type AppConfig = z.infer<typeof EnvSchema>

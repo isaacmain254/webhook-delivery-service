@@ -1,34 +1,66 @@
-import type { ErrorRequestHandler } from 'express'
+import type { ErrorRequestHandler, Response } from 'express'
+import { ZodError } from 'zod'
+import {
+  AppError,
+  ConflictError,
+  PayloadTooLargeError,
+  ValidationError,
+  zodErrorDetails,
+} from '../../lib/errors.js'
+import { prismaErrorCode } from '../../lib/prisma-errors.js'
+
+function sendError(res: Response, error: AppError): void {
+  res.status(error.statusCode).json({
+    error: {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    },
+  })
+}
 
 /**
- * Minimal error handler introduced with event ingestion so oversized requests
- * and malformed JSON map to structured responses. Task 11 replaces this with
- * the full validation/error-handling layer.
+ * Normalizes known client and datastore failures. Unknown errors deliberately
+ * fall through so they can be logged once and replaced with a generic response.
  */
+function normalizeError(error: unknown): AppError | null {
+  if (error instanceof AppError) {
+    return error
+  }
+
+  // Zod errors normally become ValidationError in the request middleware. This
+  // fallback keeps any future direct Zod parsing consistent.
+  if (error instanceof ZodError) {
+    return new ValidationError(zodErrorDetails(error))
+  }
+
+  const type = (error as { type?: unknown } | null)?.type
+  if (type === 'entity.too.large') {
+    return new PayloadTooLargeError('Request body exceeds the configured limit')
+  }
+  if (type === 'entity.parse.failed') {
+    return new AppError(400, 'INVALID_JSON', 'Request body is not valid JSON')
+  }
+
+  if (prismaErrorCode(error) === 'P2002') {
+    return new ConflictError()
+  }
+
+  return null
+}
+
 export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
   if (res.headersSent) {
     next(error)
     return
   }
 
-  const type = (error as { type?: unknown } | null)?.type
-
-  if (type === 'entity.too.large') {
-    res.status(413).json({
-      error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body exceeds the configured limit' },
-    })
-    return
-  }
-
-  if (type === 'entity.parse.failed') {
-    res.status(400).json({
-      error: { code: 'INVALID_JSON', message: 'Request body is not valid JSON' },
-    })
+  const knownError = normalizeError(error)
+  if (knownError) {
+    sendError(res, knownError)
     return
   }
 
   console.error('[api] Unhandled error:', error)
-  res.status(500).json({
-    error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
-  })
+  sendError(res, new AppError(500, 'INTERNAL_ERROR', 'Internal server error'))
 }

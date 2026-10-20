@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { eventTypeSchema } from '../lib/events.js'
 import { isJsonCanonicalizable } from '../lib/fingerprint.js'
+import { emptyQuerySchema } from './common.schema.js'
 
 // JSON object with values that survive canonical serialization. Rejects
 // non-finite numbers (for example `1e400` parses to Infinity) before they can
@@ -17,4 +18,5 @@ export const createEventRequestSchema = z.object({
     eventType: eventTypeSchema,
     payload: payloadSchema,
   }),
+  query: emptyQuerySchema,
 })

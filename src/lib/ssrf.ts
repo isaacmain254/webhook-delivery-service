@@ -1,5 +1,6 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
 import { BlockList, isIP } from 'node:net'
+import { AppError } from './errors.js'
 
 export type IpFamily = 4 | 6
 
@@ -16,12 +17,11 @@ export type SsrfErrorCode = 'HTTPS_REQUIRED' | 'INVALID_DESTINATION'
  * Raised when a webhook destination is not allowed. Messages are safe to show
  * to API clients: they never include resolved/internal network details.
  */
-export class SsrfError extends Error {
+export class SsrfError extends AppError {
   readonly code: SsrfErrorCode
 
   constructor(code: SsrfErrorCode, message: string) {
-    super(message)
-    this.name = 'SsrfError'
+    super(422, code, message)
     this.code = code
   }
 }
