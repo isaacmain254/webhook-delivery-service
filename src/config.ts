@@ -27,6 +27,11 @@ const EnvSchema = z.object({
   REQUIRE_HTTPS_DESTINATIONS: z.stringbool().default(true),
   JSON_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
   MAX_EVENT_PAYLOAD_BYTES: z.coerce.number().int().positive().default(65_536),
+  OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
+  OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(50),
+  OUTBOX_LEASE_DURATION_MS: z.coerce.number().int().positive().default(30_000),
+  OUTBOX_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  OUTBOX_RECONCILE_BATCH_SIZE: z.coerce.number().int().positive().default(100),
 })
 
 export type AppConfig = z.infer<typeof EnvSchema>

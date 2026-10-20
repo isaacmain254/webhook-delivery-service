@@ -106,12 +106,16 @@ model DeliveryAttempts {
 model OutboxRecord {
   id          String    @id @default(uuid())
   deliveryId  String    @unique
+  generation  Int       @default(0)
   published   Boolean   @default(false)
   publishedAt DateTime?
+  lockedUntil DateTime?
+  lockedBy    String?
   createdAt   DateTime  @default(now())
   delivery    Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
 
   @@index([published, createdAt])
+  @@index([published, lockedUntil])
 }
 
 enum EndpointStatus {
