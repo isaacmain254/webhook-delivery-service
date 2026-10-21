@@ -28,5 +28,7 @@ COPY --from=build --chown=node:node /app/prisma7.config.ts ./
 USER node
 
 EXPOSE 5000
+# Worker health server (WORKER_HEALTH_PORT); binds only when the worker runs.
+EXPOSE 5001
 
 CMD ["node", "dist/index.js"]

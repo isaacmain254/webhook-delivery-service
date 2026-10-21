@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import supertest from 'supertest'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import prisma from '../../src/db.js'
+import { logger } from '../../src/lib/logger.js'
 import {
   deliveryJobId,
   type DeliveryQueue,
@@ -184,7 +185,7 @@ describe('transactional outbox dispatcher', () => {
     const created = await createDelivery()
     const queue = new FakeDeliveryQueue()
     queue.failNext = true
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
 
     const failedRun = await dispatchOutboxBatch({
       queue,

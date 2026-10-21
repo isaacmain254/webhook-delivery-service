@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq'
 import config from '../config.js'
+import { logger } from './logger.js'
 
 export const DELIVERY_QUEUE_NAME = 'webhook-deliveries'
 export const DELIVERY_JOB_NAME = 'deliver'
@@ -57,7 +58,7 @@ export function createBullMqDeliveryQueue(): DeliveryQueue {
   })
 
   queue.on('error', (error: Error) => {
-    console.error('[queue] Redis connection error', error.message)
+    logger.error({ component: 'queue', error }, '[queue] Redis connection error')
   })
 
   return {

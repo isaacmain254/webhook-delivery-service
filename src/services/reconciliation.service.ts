@@ -1,6 +1,7 @@
 import prisma from '../db.js'
 import config from '../config.js'
 import { deliveryJobId, type DeliveryQueue } from '../lib/delivery-queue.js'
+import { logger } from '../lib/logger.js'
 import { buildErrorSummary } from '../lib/webhook-payload.js'
 import { resetOutboxForDelivery } from './outbox.service.js'
 import type { Prisma } from '../generated/prisma/client.js'
@@ -209,11 +210,16 @@ export async function reconcileScheduling(
     try {
       jobExists = await options.queue.hasJob(jobId)
     } catch (error) {
-      console.error('[outbox] Reconciliation could not inspect the queue', {
-        outboxId: outbox.id,
-        jobId,
-        error,
-      })
+      logger.error(
+        {
+          component: 'reconciler',
+          outboxId: outbox.id,
+          deliveryId: delivery.id,
+          jobId,
+          error,
+        },
+        '[outbox] Reconciliation could not inspect the queue',
+      )
       summary.skipped += 1
       continue
     }
@@ -275,11 +281,11 @@ export function startSchedulingReconciler(options: ReconcilerOptions): Reconcile
           summary.recoveredLeases > 0 ||
           summary.failedLeases > 0
         ) {
-          console.log('[outbox] Reconciliation run finished', summary)
+          logger.info({ component: 'reconciler', ...summary }, '[outbox] Reconciliation run finished')
         }
       })
       .catch((error: unknown) => {
-        console.error('[outbox] Reconciliation run failed', error)
+        logger.error({ component: 'reconciler', error }, '[outbox] Reconciliation run failed')
       })
       .finally(() => {
         active = null

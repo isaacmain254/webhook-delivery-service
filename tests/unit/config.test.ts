@@ -14,6 +14,42 @@ describe('loadConfig', () => {
     expect(config.MAX_DELIVERY_ATTEMPTS).toBe(5)
     expect(config.INITIAL_RETRY_DELAY_MS).toBe(1_000)
     expect(config.MAX_RETRY_DELAY_MS).toBe(3_600_000)
+    expect(config.LOG_LEVEL).toBe('info')
+    expect(config.WORKER_HEALTH_PORT).toBe(5001)
+  })
+
+  it('raises the log level from LOG_LEVEL', () => {
+    const config = loadConfig({ ...baseEnv, LOG_LEVEL: 'warn' })
+    expect(config.LOG_LEVEL).toBe('warn')
+  })
+
+  it('accepts the silent log level for fully quiet output', () => {
+    const config = loadConfig({ ...baseEnv, LOG_LEVEL: 'silent' })
+    expect(config.LOG_LEVEL).toBe('silent')
+  })
+
+  it('rejects an unsupported LOG_LEVEL', () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        LOG_LEVEL: 'VERBOSE',
+      }),
+    ).toThrow(/LOG_LEVEL/)
+  })
+
+  it('parses and validates the worker health port', () => {
+    const config = loadConfig({ ...baseEnv, WORKER_HEALTH_PORT: '5100' })
+    expect(config.WORKER_HEALTH_PORT).toBe(5100)
+  })
+
+  it('rejects a worker health port that collides with PORT', () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        PORT: '8080',
+        WORKER_HEALTH_PORT: '8080',
+      }),
+    ).toThrow(/WORKER_HEALTH_PORT: must not collide with PORT/)
   })
 
   it('requires the worker lease to outlast an in-flight request', () => {

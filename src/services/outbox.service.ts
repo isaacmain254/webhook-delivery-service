@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import prisma from '../db.js'
 import config from '../config.js'
 import { deliveryJobId, type DeliveryQueue } from '../lib/delivery-queue.js'
+import { logger } from '../lib/logger.js'
 import type { Prisma } from '../generated/prisma/client.js'
 
 /** Safety cap so a large backlog cannot keep one polling tick busy forever. */
@@ -189,23 +190,28 @@ export async function dispatchOutboxBatch(
       } else {
         // The lease expired and another dispatcher took over. It publishes the
         // same stable job ID, so BullMQ still has only one logical job.
-        console.warn('[outbox] Lost claim before publication could be recorded', {
-          outboxId: record.id,
-        })
+        logger.warn(
+          { component: 'dispatcher', deliveryId: record.id },
+          '[outbox] Lost claim before publication could be recorded',
+        )
       }
     } catch (error) {
       failed += 1
       await releaseOutboxClaim(record.id, record.generation, claimToken).catch((releaseError) => {
-        console.error('[outbox] Failed to release claim', {
+        logger.error(
+          { component: 'dispatcher', outboxId: record.id, error: releaseError },
+          '[outbox] Failed to release claim',
+        )
+      })
+      logger.error(
+        {
+          component: 'dispatcher',
           outboxId: record.id,
-          error: releaseError,
-        })
-      })
-      console.error('[outbox] Failed to publish delivery job', {
-        outboxId: record.id,
-        deliveryId: record.deliveryId,
-        error,
-      })
+          deliveryId: record.deliveryId,
+          error,
+        },
+        '[outbox] Failed to publish delivery job',
+      )
     }
   }
 
@@ -274,11 +280,11 @@ export function startOutboxDispatcher(
     active = dispatchPendingOutbox(options)
       .then((summary) => {
         if (summary.claimed > 0 || summary.failed > 0) {
-          console.log('[outbox] Dispatch run finished', summary)
+          logger.info({ component: 'dispatcher', ...summary }, '[outbox] Dispatch run finished')
         }
       })
       .catch((error: unknown) => {
-        console.error('[outbox] Dispatch run failed', error)
+        logger.error({ component: 'dispatcher', error }, '[outbox] Dispatch run failed')
       })
       .finally(() => {
         active = null

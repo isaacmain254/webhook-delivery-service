@@ -7,6 +7,7 @@ import {
   ValidationError,
   zodErrorDetails,
 } from '../../lib/errors.js'
+import { logger } from '../../lib/logger.js'
 import { prismaErrorCode } from '../../lib/prisma-errors.js'
 
 function sendError(res: Response, error: AppError): void {
@@ -49,7 +50,7 @@ function normalizeError(error: unknown): AppError | null {
   return null
 }
 
-export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
+export const errorHandler: ErrorRequestHandler = (error, req, res, next) => {
   if (res.headersSent) {
     next(error)
     return
@@ -61,6 +62,9 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
     return
   }
 
-  console.error('[api] Unhandled error:', error)
+  logger.error(
+    { component: 'api', requestId: req.requestId, error },
+    '[api] Unhandled error',
+  )
   sendError(res, new AppError(500, 'INTERNAL_ERROR', 'Internal server error'))
 }

@@ -30,6 +30,10 @@ const EnvSchema = z
     REQUIRE_HTTPS_DESTINATIONS: z.stringbool().default(true),
     JSON_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
     MAX_EVENT_PAYLOAD_BYTES: z.coerce.number().int().positive().default(65_536),
+    LOG_LEVEL: z
+      .enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'])
+      .default('info'),
+    WORKER_HEALTH_PORT: z.coerce.number().int().min(0).default(5001),
     OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
     OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(50),
     OUTBOX_LEASE_DURATION_MS: z.coerce.number().int().positive().default(30_000),
@@ -58,6 +62,14 @@ const EnvSchema = z
         code: 'custom',
         path: ['MAX_EVENT_PAYLOAD_BYTES'],
         message: 'must not exceed JSON_BODY_LIMIT_BYTES',
+      })
+    }
+
+    if (env.WORKER_HEALTH_PORT === env.PORT) {
+      context.addIssue({
+        code: 'custom',
+        path: ['WORKER_HEALTH_PORT'],
+        message: 'must not collide with PORT',
       })
     }
   })

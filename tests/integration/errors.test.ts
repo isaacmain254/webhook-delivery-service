@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import prisma from '../../src/db.js'
 import { createTestApp } from '../helpers/test-app.js'
 import { registerUser, uniqueUsername, type TestUser } from '../helpers/users.js'
+import { logger } from '../../src/lib/logger.js'
 
 const app = createTestApp()
 
@@ -176,7 +177,7 @@ describe('API validation and error handling', () => {
   })
 
   it('handles async failures without exposing internals or stack traces', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined)
     vi.spyOn(prisma.webhookEndpoint, 'findMany').mockRejectedValue(
       new Error('database password secret-value'),
     )
@@ -186,7 +187,7 @@ describe('API validation and error handling', () => {
       .set('X-API-Key', owner.apiKey)
       .expect(500)
 
-    expect(consoleError).toHaveBeenCalled()
+    expect(logError).toHaveBeenCalled()
     expect(response.body).toEqual({
       error: {
         code: 'INTERNAL_ERROR',

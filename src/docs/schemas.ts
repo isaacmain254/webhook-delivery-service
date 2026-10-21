@@ -58,12 +58,27 @@ export const errorResponseSchema = z
   })
   .meta({ id: 'ErrorResponse', description: 'Standard API error response' })
 
+export const healthStatusSchema = z.enum(['ok', 'unavailable']).meta({
+  description: 'Dependency connection state',
+  example: 'ok',
+})
+
 export const healthResponseSchema = z
   .object({
-    status: z.literal(200),
-    message: z.string().meta({ example: 'Healthy...' }),
+    status: z.enum(['ok', 'degraded']).meta({
+      description: 'Overall readiness. Degraded when any dependency is unreachable.',
+      example: 'ok',
+    }),
+    db: healthStatusSchema,
+    redis: healthStatusSchema,
   })
-  .meta({ id: 'HealthResponse', description: 'Service health' })
+  .meta({ id: 'HealthResponse', description: 'Dependency readiness report' })
+
+export const liveResponseSchema = z
+  .object({
+    status: z.literal('ok'),
+  })
+  .meta({ id: 'LiveResponse', description: 'Process liveness report' })
 
 export const userRegistrationResponseSchema = z
   .object({

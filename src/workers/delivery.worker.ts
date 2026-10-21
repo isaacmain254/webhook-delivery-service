@@ -1,5 +1,6 @@
 import { Worker, type Job } from 'bullmq'
 import config from '../config.js'
+import { logger } from '../lib/logger.js'
 import {
   DELIVERY_QUEUE_NAME,
   type DeliveryJobData,
@@ -46,15 +47,22 @@ export function createDeliveryWorker(
   )
 
   worker.on('error', (error: Error) => {
-    console.error('[worker] BullMQ worker error', error.message)
+    logger.error(
+      { component: 'worker', error },
+      '[worker] BullMQ worker error',
+    )
   })
 
   worker.on('failed', (job, error: Error) => {
-    console.error('[worker] Delivery job failed', {
-      jobId: job?.id,
-      deliveryId: job?.data?.deliveryId,
-      error: error.message,
-    })
+    logger.error(
+      {
+        component: 'worker',
+        jobId: job?.id,
+        deliveryId: job?.data?.deliveryId,
+        error,
+      },
+      '[worker] Delivery job failed',
+    )
   })
 
   return worker

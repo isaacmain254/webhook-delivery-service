@@ -9,6 +9,7 @@ import {
   type WebhookHttpResponse,
 } from '../lib/delivery-http.js'
 import { signWebhook } from '../lib/hmac.js'
+import { logger } from '../lib/logger.js'
 import { computeRetryDelayMs, isRetryAllowed } from '../lib/retry.js'
 import { SsrfError } from '../lib/ssrf.js'
 import {
@@ -303,10 +304,10 @@ export async function processDeliveryJob(
     }
   } catch (error) {
     await releaseFailedClaim(deliveryId, workerId).catch((releaseError: unknown) => {
-      console.error('[delivery] Failed to release claim after internal error', {
-        deliveryId,
-        error: releaseError,
-      })
+      logger.error(
+        { component: 'delivery', deliveryId, error: releaseError },
+        '[delivery] Failed to release claim after internal error',
+      )
     })
     throw error
   }

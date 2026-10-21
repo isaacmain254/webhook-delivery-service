@@ -6,6 +6,7 @@ import {
   errorResponseSchema,
   eventCreatedResponseSchema,
   healthResponseSchema,
+  liveResponseSchema,
   userRegistrationResponseSchema,
 } from '../../src/docs/schemas.js'
 import {
@@ -24,6 +25,7 @@ type JsonObject = Record<string, any>
 
 const expectedOperations: Record<string, string[]> = {
   '/health': ['get'],
+  '/health/live': ['get'],
   '/users': ['post'],
   '/endpoints': ['post', 'get'],
   '/endpoints/{id}': ['get', 'patch', 'delete'],
@@ -160,7 +162,7 @@ describe('API documentation', () => {
       }
     }
 
-    expect(operationCount).toBe(14)
+    expect(operationCount).toBe(15)
   })
 
   it('declares API-key security only on protected operations', () => {
@@ -170,7 +172,7 @@ describe('API documentation', () => {
     expect(operation(document, '/users', 'post').security).toBeUndefined()
 
     for (const [path, methods] of Object.entries(expectedOperations)) {
-      if (path === '/health' || path === '/users') {
+      if (path === '/health' || path === '/health/live' || path === '/users') {
         continue
       }
 
@@ -190,6 +192,7 @@ describe('API documentation', () => {
       expect.arrayContaining([
         'ErrorResponse',
         'HealthResponse',
+        'LiveResponse',
         'UserRegistrationResponse',
         'Endpoint',
         'CreatedEndpoint',
@@ -248,6 +251,15 @@ describe('API documentation', () => {
     expect(
       healthResponseSchema.safeParse(responseExample(document, '/health', 'get', '200'))
         .success,
+    ).toBe(true)
+    expect(
+      healthResponseSchema.safeParse(responseExample(document, '/health', 'get', '503'))
+        .success,
+    ).toBe(true)
+    expect(
+      liveResponseSchema.safeParse(
+        responseExample(document, '/health/live', 'get', '200'),
+      ).success,
     ).toBe(true)
     expect(
       userRegistrationResponseSchema.safeParse(

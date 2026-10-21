@@ -17,6 +17,7 @@ import {
   eventCreatedResponseSchema,
   eventDetailResponseSchema,
   healthResponseSchema,
+  liveResponseSchema,
   userRegistrationResponseSchema,
 } from './schemas.js'
 
@@ -127,12 +128,35 @@ function buildDocument() {
     path: '/health',
     operationId: 'getHealth',
     tags: ['Health'],
-    summary: 'Check service health',
-    description: 'Returns a lightweight liveness response. This route is public.',
+    summary: 'Check service readiness',
+    description:
+      'Pings PostgreSQL and Redis concurrently and reports each dependency independently. The route is public; 503 signals a degraded state while the process stays alive. Use GET /health/live for a dependency-independent liveness probe.',
     responses: {
-      200: jsonResponse('Service is healthy', healthResponseSchema, {
-        status: 200,
-        message: 'Healthy...',
+      200: jsonResponse('Service is ready', healthResponseSchema, {
+        status: 'ok',
+        db: 'ok',
+        redis: 'ok',
+      }),
+      503: jsonResponse('At least one dependency is unreachable', healthResponseSchema, {
+        status: 'degraded',
+        db: 'ok',
+        redis: 'unavailable',
+      }),
+      500: jsonResponse('Unexpected server error', errorResponseSchema),
+    },
+  })
+
+  registry.registerPath({
+    method: 'get',
+    path: '/health/live',
+    operationId: 'getHealthLive',
+    tags: ['Health'],
+    summary: 'Check process liveness',
+    description:
+      'Returns quickly without touching PostgreSQL or Redis. A 200 means the API process is up and serving requests; use GET /health for dependency readiness.',
+    responses: {
+      200: jsonResponse('Process is live', liveResponseSchema, {
+        status: 'ok',
       }),
       500: jsonResponse('Unexpected server error', errorResponseSchema),
     },

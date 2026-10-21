@@ -7,6 +7,7 @@ import {
   NotFoundError,
   ValidationError,
 } from '../../src/lib/errors.js'
+import { logger } from '../../src/lib/logger.js'
 
 function createResponse(headersSent = false): {
   res: Response
@@ -125,14 +126,14 @@ describe('errorHandler', () => {
   })
 
   it('hides unexpected error details and logs them server-side', () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => undefined)
     const { res, status, json } = createResponse()
     const secret = new Error('database password is secret-value')
     secret.stack = 'SECRET STACK'
 
     errorHandler(secret, req, res, vi.fn())
 
-    expect(consoleError).toHaveBeenCalled()
+    expect(logError).toHaveBeenCalled()
     expect(status).toHaveBeenCalledWith(500)
     expect(json).toHaveBeenCalledWith({
       error: {
